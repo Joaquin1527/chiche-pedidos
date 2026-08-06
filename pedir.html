@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chiche Hamburguesería — Hacé tu pedido</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="pedir.css">
+</head>
+<body>
+
+<!-- Pantalla de tienda cerrada (tapa todo hasta que confirmamos que está abierta) -->
+<div id="cerradoOverlay" class="overlay hidden">
+  <div class="overlay-sheet success-sheet">
+    <div class="success-icon">🔒</div>
+    <h2>Cerrado momentáneamente</h2>
+    <p class="muted">Chiche Hamburguesería no está tomando pedidos en este momento. Volvé a intentarlo en un rato.</p>
+  </div>
+</div>
+
+<div class="page" id="pageContent">
+  <div class="app">
+
+    <header class="header">
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-name">CHICHE<span class="brand-dot">.</span></div>
+          <div class="brand-sub">Hacé tu pedido</div>
+        </div>
+        <div class="brand-badge">🍔</div>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs"></nav>
+
+    <main id="menuList" class="menu-list"></main>
+
+  </div>
+
+  <button id="cartBar" class="cart-bar hidden">
+    <span class="cart-bar-info"><span id="cartCount">0</span> productos — <span id="cartTotal">$0</span></span>
+    <span class="cart-bar-cta">Ver pedido →</span>
+  </button>
+</div>
+
+<!-- Overlay: detalle de un producto personalizable (hamburguesas) -->
+<div id="detailOverlay" class="overlay hidden">
+  <div class="overlay-sheet">
+    <div class="overlay-header">
+      <button id="closeDetail" class="btn-back" aria-label="Volver">←</button>
+    </div>
+    <div class="overlay-scroll">
+      <div class="overlay-hero" id="detailHero">🍔</div>
+      <div class="overlay-body">
+        <h2 id="detailName"></h2>
+        <p id="detailDesc" class="muted"></p>
+        <p class="detail-price" id="detailPrice"></p>
+
+        <div class="section">
+          <h3>Salsa</h3>
+          <div id="salsaOptions" class="options-list"></div>
+        </div>
+
+        <div class="section hidden" id="ingredientesSection">
+          <h3>Sacar algún ingrediente</h3>
+          <div id="ingredientesOptions" class="options-list"></div>
+        </div>
+
+        <div class="section">
+          <h3>Extras</h3>
+          <div id="extrasOptions" class="options-list"></div>
+        </div>
+
+        <div class="section">
+          <textarea id="observaciones" class="textarea" placeholder="Observaciones (opcional)" rows="2"></textarea>
+        </div>
+
+        <div class="qty-row">
+          <span class="qty-label">Cantidad</span>
+          <div class="stepper">
+            <button id="qtyMinus" class="stepper-btn" type="button">−</button>
+            <span id="qtyValue">1</span>
+            <button id="qtyPlus" class="stepper-btn" type="button">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="overlay-footer">
+      <button id="cancelDetail" class="btn-secondary" type="button">Cancelar</button>
+      <button id="addToCart" class="btn-primary" type="button">Agregar — <span id="addPrice">$0</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay: carrito / resumen del pedido -->
+<div id="cartOverlay" class="overlay hidden">
+  <div class="overlay-sheet">
+    <div class="overlay-header">
+      <button id="closeCart" class="btn-back" aria-label="Volver">←</button>
+      <h2 class="overlay-title">Tu pedido</h2>
+    </div>
+    <div class="overlay-scroll">
+      <div class="overlay-body">
+        <div id="cartItems" class="cart-items"></div>
+        <div class="divider"></div>
+        <div class="total-row">
+          <span class="total-label">Total</span>
+          <span id="cartOverlayTotal" class="total-amount">$0</span>
+        </div>
+        <input id="clienteNombre" type="text" placeholder="Tu nombre" class="input" />
+        <input id="clienteTelefono" type="text" placeholder="Teléfono (opcional)" class="input" />
+      </div>
+    </div>
+    <div class="overlay-footer">
+      <button id="confirmOrder" class="btn-primary" type="button" disabled>Pagar pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay: pago con Mercado Pago (QR / link) -->
+<div id="paymentOverlay" class="overlay hidden">
+  <div class="overlay-sheet">
+    <div class="overlay-header">
+      <h2 class="overlay-title">Pagá tu pedido</h2>
+    </div>
+    <div class="overlay-scroll">
+      <div class="overlay-body payment-body">
+        <div class="qr-container"><img id="paymentQr" src="" alt="QR de pago" /></div>
+        <a id="paymentLink" class="link-pago" href="#" target="_blank"></a>
+        <p class="esperando" id="paymentWaitingMsg">⏳ Esperando confirmación de pago...</p>
+        <div id="paymentFailedBox" class="hidden">
+          <p class="payment-failed-msg">No pudimos confirmar el pago. Volvé a intentarlo o acercate al local.</p>
+          <button id="backToMenuBtn" class="btn-primary" type="button">Volver al menú</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay: confirmación final -->
+<div id="successOverlay" class="overlay hidden">
+  <div class="overlay-sheet success-sheet">
+    <div class="success-icon" id="successIcon">✅</div>
+    <h2 id="successTitle">¡Tu pedido está en marcha!</h2>
+    <p class="muted" id="successMsg">Ya confirmamos tu pago. Chiche Hamburguesería ya lo está preparando.</p>
+    <p class="estimated-time" id="estimatedTime">⏱️ Tiempo estimado: 20 minutos</p>
+    <button id="newOrderBtn" class="btn-primary" type="button">Hacer otro pedido</button>
+  </div>
+</div>
+
+<script src="pedir.js"></script>
+</body>
+</html>

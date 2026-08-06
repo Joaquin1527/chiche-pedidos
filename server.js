@@ -15,8 +15,10 @@ const DB_FILE = path.join(__dirname, 'db.json');
 // Para un negocio de este tamano alcanza de sobra. Si en el futuro crece mucho
 // el volumen, se puede migrar a SQLite o Postgres sin tocar el resto del codigo.
 function leerDB() {
-  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({ pedidos: [] }, null, 2));
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({ pedidos: [], tiendaAbierta: true }, null, 2));
+  const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  if (typeof db.tiendaAbierta !== 'boolean') db.tiendaAbierta = true; // compatibilidad con db.json viejos
+  return db;
 }
 function guardarDB(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -32,57 +34,37 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'Public')));
 
-// ---------- QR interoperable (Transferencias 3.0 — cualquier banco/billetera) ----------
-// A diferencia de Checkout Pro, esta caja usa un QR FIJO (modelo estatico):
-// la imagen del QR no cambia, lo que cambia es el monto/pedido asociado a esa
-// caja en Mercado Pago en el momento de generar el cobro. Por eso conviene
-// usarlo de a un pedido por vez (no para pedidos simultaneos de varios clientes).
-async function generarQrInteroperable(pedido) {
-  const url = `https://api.mercadopago.com/instore/orders/qr/seller/collectors/${process.env.MP_USER_ID}/pos/${process.env.MP_POS_ID}/qrs`;
+// ---------- Estado de la tienda (abierta / cerrada) ----------
+app.get('/api/estado-tienda', (req, res) => {
+  const db = leerDB();
+  res.json({ abierta: db.tiendaAbierta });
+});
 
-  const body = {
-    external_reference: pedido.id,
-    title: 'Chiche Hamburguesería',
-    description: pedido.items.map((it) => `${it.cantidad}x ${it.nombre}`).join(', ').slice(0, 250),
-    notification_url: `${process.env.PUBLIC_URL}/api/webhook/mercadopago-qr`,
-    total_amount: pedido.total,
-    items: pedido.items.map((it) => ({
-      title: String(it.nombre).slice(0, 250),
-      unit_price: Number(it.precio),
-      quantity: Number(it.cantidad),
-      unit_measure: 'unit',
-      total_amount: Number(it.precio) * Number(it.cantidad),
-    })),
-  };
-
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Mercado Pago rechazo la orden QR (${res.status}): ${errorText}`);
+app.post('/api/estado-tienda', (req, res) => {
+  const { abierta } = req.body;
+  if (typeof abierta !== 'boolean') {
+    return res.status(400).json({ error: "Falta el campo 'abierta' (true/false)" });
   }
-
-  // La imagen del QR es siempre la misma para esta caja (la sacamos una vez
-  // con GET /pos y la dejamos fija por variable de entorno).
-  return process.env.MP_QR_IMAGE_URL;
-}
+  const db = leerDB();
+  db.tiendaAbierta = abierta;
+  guardarDB(db);
+  res.json({ abierta: db.tiendaAbierta });
+});
 
 // ---------- Crear pedido ----------
 app.post('/api/pedidos', async (req, res) => {
   try {
+    const dbCheck = leerDB();
+    if (!dbCheck.tiendaAbierta) {
+      return res.status(403).json({ error: 'La tienda esta cerrada en este momento' });
+    }
+
     const { cliente, items, metodo, empleado } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'El pedido necesita al menos un item' });
     }
-    if (!['mercadopago', 'transferencia', 'qr_interoperable'].includes(metodo)) {
+    if (!['mercadopago', 'transferencia'].includes(metodo)) {
       return res.status(400).json({ error: 'Metodo de pago invalido' });
     }
 
@@ -131,10 +113,6 @@ app.post('/api/pedidos', async (req, res) => {
       pedido.mpPreferenceId = preference.id;
       pedido.linkPago = preference.init_point;
       pedido.qr = await QRCode.toDataURL(preference.init_point);
-    }
-
-    if (metodo === 'qr_interoperable') {
-      pedido.qr = await generarQrInteroperable(pedido);
     }
 
     const db = leerDB();
@@ -237,60 +215,6 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
   } catch (err) {
     console.error('Error procesando webhook:', err);
     res.sendStatus(200); // igual devolvemos 200 para que MP no reintente en loop por un error nuestro
-  }
-});
-
-// ---------- Webhook del QR interoperable (merchant_order) ----------
-// Este producto de Mercado Pago avisa via el topico "merchant_order", distinto
-// al webhook de pagos de Checkout Pro. La notificacion trae el ID de la orden;
-// hay que consultarla para saber si de verdad se pago (order_status: "closed").
-// NOTA: la documentacion de Mercado Pago para este producto tiene inconsistencias
-// entre paginas propias — si esto no dispara solo tras una prueba real, revisar
-// los logs de Render en el momento del pago para ajustar el formato exacto.
-app.post('/api/webhook/mercadopago-qr', async (req, res) => {
-  try {
-    console.log('Webhook QR interoperable recibido:', JSON.stringify({ query: req.query, body: req.body }));
-
-    const topic = req.query.topic || req.body?.topic || req.body?.type;
-    const resourceUrl = req.query.resource || req.body?.resource;
-    const merchantOrderId = req.query.id || req.body?.id;
-
-    if (topic === 'merchant_order' || topic === 'merchant_orders' || resourceUrl || merchantOrderId) {
-      let merchantOrderUrl = resourceUrl;
-      if (!merchantOrderUrl && merchantOrderId) {
-        merchantOrderUrl = `https://api.mercadopago.com/merchant_orders/${merchantOrderId}`;
-      }
-
-      if (merchantOrderUrl) {
-        const mOrderRes = await fetch(merchantOrderUrl, {
-          headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` },
-        });
-        const merchantOrder = await mOrderRes.json();
-        console.log('Detalle de merchant_order:', JSON.stringify(merchantOrder));
-
-        const orderId = merchantOrder.external_reference;
-        const db = leerDB();
-        const pedido = db.pedidos.find((p) => p.id === orderId);
-
-        if (pedido) {
-          const pagoAprobado =
-            merchantOrder.order_status === 'closed' ||
-            merchantOrder.payments?.some((p) => p.status === 'approved');
-
-          if (pagoAprobado && pedido.estado !== 'pagado') {
-            pedido.estado = 'pagado';
-            pedido.pagadoEn = new Date().toISOString();
-            pedido.confirmadoPor = 'Mercado Pago QR (automatico)';
-            guardarDB(db);
-          }
-        }
-      }
-    }
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error('Error procesando webhook de QR interoperable:', err);
-    res.sendStatus(200);
   }
 });
 
