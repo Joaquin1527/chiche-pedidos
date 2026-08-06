@@ -288,72 +288,25 @@ async function confirmarManual(id) {
 window.confirmarManual = confirmarManual;
 
 // ---------- Sonido de aviso (se genera con el navegador, sin archivos externos) ----------
-// Un solo AudioContext reutilizado (crear uno nuevo cada vez es poco confiable
-// y los navegadores lo bloquean hasta que hay una interacción del usuario).
-let audioCtx = null;
-function desbloquearAudio() {
-  if (!audioCtx) {
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (err) {
-      return;
-    }
-  }
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-}
-document.addEventListener('click', desbloquearAudio);
-document.addEventListener('touchstart', desbloquearAudio);
-
-function pitidoUnico(momentoInicio) {
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = 'sine';
-  gain.gain.setValueAtTime(0.001, momentoInicio);
-  gain.gain.exponentialRampToValueAtTime(0.35, momentoInicio + 0.02);
-  osc.frequency.setValueAtTime(880, momentoInicio);
-  osc.frequency.setValueAtTime(660, momentoInicio + 0.16);
-  gain.gain.exponentialRampToValueAtTime(0.001, momentoInicio + 0.5);
-  osc.start(momentoInicio);
-  osc.stop(momentoInicio + 0.55);
-}
-
 function reproducirSonidoAviso() {
   try {
-    desbloquearAudio();
-    if (!audioCtx) return;
-    // 3 pitidos seguidos en vez de uno solo, para que sea mas dificil no notarlo
-    const ahora = audioCtx.currentTime;
-    pitidoUnico(ahora);
-    pitidoUnico(ahora + 0.65);
-    pitidoUnico(ahora + 1.3);
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
   } catch (err) {
     console.error('No se pudo reproducir el sonido de aviso:', err);
   }
 }
-
-// ---------- Título de la pestaña parpadeando ----------
-const tituloOriginal = document.title;
-let parpadeoIntervalo = null;
-function iniciarParpadeoTitulo() {
-  if (parpadeoIntervalo) return;
-  let mostrandoAlerta = false;
-  parpadeoIntervalo = setInterval(() => {
-    document.title = mostrandoAlerta ? tituloOriginal : '🔴 ¡Nuevo pedido! — Chiche';
-    mostrandoAlerta = !mostrandoAlerta;
-  }, 900);
-}
-function detenerParpadeoTitulo() {
-  if (parpadeoIntervalo) {
-    clearInterval(parpadeoIntervalo);
-    parpadeoIntervalo = null;
-    document.title = tituloOriginal;
-  }
-}
-// apenas el empleado vuelve a mirar la pestaña, paramos el parpadeo
-window.addEventListener('focus', detenerParpadeoTitulo);
-document.addEventListener('click', detenerParpadeoTitulo);
 
 let idsYaAvisados = new Set();
 let primeraCargaDePedidos = true;
@@ -365,21 +318,14 @@ function renderOrders(pedidos) {
   el.ordersList.innerHTML = '';
 
   let hayPedidoNuevoPagado = false;
-  const idsNuevosEnEstaVuelta = [];
 
   pedidos.forEach((order) => {
     if (order.estado === 'pagado' && !idsYaAvisados.has(order.id)) {
-      if (!primeraCargaDePedidos) {
-        hayPedidoNuevoPagado = true;
-        idsNuevosEnEstaVuelta.push(order.id);
-      }
+      if (!primeraCargaDePedidos) hayPedidoNuevoPagado = true;
       idsYaAvisados.add(order.id);
     }
 
     const node = el.orderCardTpl.content.firstElementChild.cloneNode(true);
-    if (idsNuevosEnEstaVuelta.includes(order.id)) {
-      node.classList.add('pedido-nuevo-flash');
-    }
     const badge = node.querySelector('[data-field="badge"]');
     badge.textContent = order.estado.toUpperCase();
     badge.classList.add(order.estado);
@@ -406,11 +352,7 @@ function renderOrders(pedidos) {
     el.ordersList.appendChild(node);
   });
 
-  if (hayPedidoNuevoPagado) {
-    reproducirSonidoAviso();
-    iniciarParpadeoTitulo();
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-  }
+  if (hayPedidoNuevoPagado) reproducirSonidoAviso();
   primeraCargaDePedidos = false;
 }
 
