@@ -1,0 +1,19 @@
+{
+  "name": "pancheria-cobros",
+  "version": "1.0.0",
+  "description": "Sistema de cobro remoto y confirmacion de pago para Chiche Hamburgueseria",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mercadopago": "^2.0.15",
+    "qrcode": "^1.5.3",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5",
+    "nanoid": "^5.0.7"
+  }
+}
