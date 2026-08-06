@@ -355,21 +355,18 @@ body {
   color: oklch(0.75 0.16 150);
 }
 
-/* --- Fotos reales de producto (recortes sin fondo, reemplazan el emoji) --- */
+/* --- Fotos reales de producto (ya vienen con fondo con degradé propio) --- */
 .product-photo {
   width: 64px;
   height: 64px;
   flex-shrink: 0;
   border-radius: 12px;
-  object-fit: contain;
-  padding: 4px;
-  background: oklch(0.62 0.19 25 / 0.12);
+  object-fit: cover;
 }
 
 .detail-hero-photo {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  padding: 16px;
+  object-fit: cover;
   display: block;
 }

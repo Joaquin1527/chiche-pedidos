@@ -30,7 +30,6 @@ const el = {
   itemsList: document.getElementById('itemsList'),
   addItemBtn: document.getElementById('addItemBtn'),
   payMP: document.getElementById('payMercadoPago'),
-  payQr: document.getElementById('payQrInteroperable'),
   payTransfer: document.getElementById('payTransferencia'),
   totalAmount: document.getElementById('totalAmount'),
   generateBtn: document.getElementById('generateChargeBtn'),
@@ -163,7 +162,6 @@ function updateTotals() {
 function setPaymentMethod(method) {
   paymentMethod = method;
   el.payMP.classList.toggle('active', method === 'mercadopago');
-  el.payQr.classList.toggle('active', method === 'qr_interoperable');
   el.payTransfer.classList.toggle('active', method === 'transferencia');
 }
 
@@ -222,7 +220,7 @@ function mostrarPedidoActivo(pedido) {
 
   if (pollingInterval) clearInterval(pollingInterval);
 
-  if ((pedido.metodo === 'mercadopago' || pedido.metodo === 'qr_interoperable') && pedido.estado === 'pendiente') {
+  if (pedido.metodo === 'mercadopago' && pedido.estado === 'pendiente') {
     pollingInterval = setInterval(async () => {
       const res = await fetch(`/api/pedidos/${pedido.id}`);
       const actualizado = await res.json();
@@ -249,16 +247,6 @@ function renderPedidoActivo(pedido) {
         <p class="esperando">⏳ Esperando confirmación automática de Mercado Pago...</p>
       `
       : `<p class="confirmado-msg">✅ Pago confirmado automáticamente por Mercado Pago.</p>`;
-  } else if (pedido.metodo === 'qr_interoperable') {
-    bloquePago = pedido.estado === 'pendiente'
-      ? `
-        <div class="qr-container">
-          <img src="${pedido.qr}" alt="QR de pago" />
-        </div>
-        <p class="esperando">⏳ Esperando confirmación automática (cualquier banco/billetera)...</p>
-        <p class="active-order-items">⚠️ Esta caja es de un pedido a la vez — no generes otro cobro con este método hasta que este se confirme o canceles.</p>
-      `
-      : `<p class="confirmado-msg">✅ Pago confirmado automáticamente.</p>`;
   } else {
     bloquePago = pedido.estado === 'pendiente'
       ? `<p class="active-order-items">Pedile al cliente que transfiera y verificá en el resumen bancario antes de confirmar.</p>
@@ -387,7 +375,6 @@ async function cargarPedidos() {
 el.addItemBtn.addEventListener('click', addItem);
 el.customerName.addEventListener('input', updateTotals);
 el.payMP.addEventListener('click', () => setPaymentMethod('mercadopago'));
-el.payQr.addEventListener('click', () => setPaymentMethod('qr_interoperable'));
 el.payTransfer.addEventListener('click', () => setPaymentMethod('transferencia'));
 el.generateBtn.addEventListener('click', generateCharge);
 
