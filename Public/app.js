@@ -311,23 +311,24 @@ function pitidoUnico(momentoInicio) {
   gain.connect(audioCtx.destination);
   osc.type = 'sine';
   gain.gain.setValueAtTime(0.001, momentoInicio);
-  gain.gain.exponentialRampToValueAtTime(0.35, momentoInicio + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.55, momentoInicio + 0.03); // mas volumen (antes 0.35)
   osc.frequency.setValueAtTime(880, momentoInicio);
-  osc.frequency.setValueAtTime(660, momentoInicio + 0.16);
-  gain.gain.exponentialRampToValueAtTime(0.001, momentoInicio + 0.5);
+  osc.frequency.setValueAtTime(660, momentoInicio + 0.32); // el doble de tiempo en cada nota (antes 0.16)
+  gain.gain.exponentialRampToValueAtTime(0.001, momentoInicio + 1.0); // el doble de duracion total (antes 0.5)
   osc.start(momentoInicio);
-  osc.stop(momentoInicio + 0.55);
+  osc.stop(momentoInicio + 1.05);
 }
 
 function reproducirSonidoAviso() {
   try {
     desbloquearAudio();
     if (!audioCtx) return;
-    // 3 pitidos seguidos en vez de uno solo, para que sea mas dificil no notarlo
+    // 4 pitidos largos seguidos (cada uno dura el doble que antes)
     const ahora = audioCtx.currentTime;
     pitidoUnico(ahora);
-    pitidoUnico(ahora + 0.65);
-    pitidoUnico(ahora + 1.3);
+    pitidoUnico(ahora + 1.15);
+    pitidoUnico(ahora + 2.3);
+    pitidoUnico(ahora + 3.45);
   } catch (err) {
     console.error('No se pudo reproducir el sonido de aviso:', err);
   }
@@ -354,6 +355,28 @@ function detenerParpadeoTitulo() {
 // apenas el empleado vuelve a mirar la pestaña, paramos el parpadeo
 window.addEventListener('focus', detenerParpadeoTitulo);
 document.addEventListener('click', detenerParpadeoTitulo);
+
+// ---------- Destello de PANTALLA COMPLETA (se tiene que ver desde lejos) ----------
+let flashElemento = null;
+let flashTimeout = null;
+function iniciarFlashPantallaCompleta() {
+  if (!flashElemento) {
+    flashElemento = document.createElement('div');
+    flashElemento.id = 'flashPantallaCompleta';
+    flashElemento.innerHTML = '<span>🔴 ¡NUEVO PEDIDO!</span>';
+    document.body.appendChild(flashElemento);
+  }
+  flashElemento.classList.add('activo');
+
+  if (flashTimeout) clearTimeout(flashTimeout);
+  // se apaga solo despues de que termino de sonar el aviso (4 pitidos largos)
+  flashTimeout = setTimeout(detenerFlashPantallaCompleta, 4600);
+}
+function detenerFlashPantallaCompleta() {
+  if (flashElemento) flashElemento.classList.remove('activo');
+}
+// tocar la pantalla tambien apaga el destello antes de que termine solo
+document.addEventListener('click', detenerFlashPantallaCompleta);
 
 let idsYaAvisados = new Set();
 let primeraCargaDePedidos = true;
@@ -409,7 +432,8 @@ function renderOrders(pedidos) {
   if (hayPedidoNuevoPagado) {
     reproducirSonidoAviso();
     iniciarParpadeoTitulo();
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+    iniciarFlashPantallaCompleta();
+    if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300, 150, 300]);
   }
   primeraCargaDePedidos = false;
 }

@@ -402,3 +402,44 @@ select { color-scheme: dark; }
 .pedido-nuevo-flash {
   animation: pedidoNuevoFlash 1.4s ease-in-out 3;
 }
+
+/* --- Link a métricas desde el panel --- */
+.btn-metricas {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1.5px solid oklch(0.28 0.01 30);
+  color: oklch(0.85 0.01 30);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+/* --- Destello de pantalla completa (aviso de pedido nuevo, visible de lejos) --- */
+#flashPantallaCompleta {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* no bloquea que el empleado siga trabajando */
+}
+#flashPantallaCompleta.activo {
+  display: flex;
+  animation: flashFondoFuerte 0.5s steps(1) infinite;
+}
+#flashPantallaCompleta span {
+  font-size: 42px;
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  padding: 0 20px;
+}
+@keyframes flashFondoFuerte {
+  0%, 100% { background: oklch(0.62 0.22 25 / 0.92); }
+  50% { background: oklch(0.85 0.2 90 / 0.92); }
+}
