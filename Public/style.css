@@ -363,3 +363,42 @@ select { color-scheme: dark; }
   background: oklch(0.65 0.15 150 / 0.16);
   color: oklch(0.75 0.16 150);
 }
+
+/* --- Botón de tienda abierta / cerrada --- */
+.btn-tienda {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-tienda.abierta {
+  background: oklch(0.65 0.15 150 / 0.16);
+  color: oklch(0.75 0.16 150);
+  border: 1.5px solid oklch(0.65 0.15 150 / 0.4);
+}
+.btn-tienda.cerrada {
+  background: oklch(0.62 0.19 25 / 0.16);
+  color: oklch(0.75 0.17 25);
+  border: 1.5px solid oklch(0.62 0.19 25 / 0.4);
+}
+.btn-tienda:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* --- Destello visual para pedidos recién llegados --- */
+@keyframes pedidoNuevoFlash {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.65 0.15 150 / 0); }
+  15% { box-shadow: 0 0 0 4px oklch(0.65 0.15 150 / 0.5); }
+  30% { box-shadow: 0 0 0 0 oklch(0.65 0.15 150 / 0); }
+  45% { box-shadow: 0 0 0 4px oklch(0.65 0.15 150 / 0.5); }
+}
+.pedido-nuevo-flash {
+  animation: pedidoNuevoFlash 1.4s ease-in-out 3;
+}

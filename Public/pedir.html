@@ -10,7 +10,16 @@
 </head>
 <body>
 
-<div class="page">
+<!-- Pantalla de tienda cerrada (tapa todo hasta que confirmamos que está abierta) -->
+<div id="cerradoOverlay" class="overlay hidden">
+  <div class="overlay-sheet success-sheet">
+    <div class="success-icon">🔒</div>
+    <h2>Cerrado momentáneamente</h2>
+    <p class="muted">Chiche Hamburguesería no está tomando pedidos en este momento. Volvé a intentarlo en un rato.</p>
+  </div>
+</div>
+
+<div class="page" id="pageContent">
   <div class="app">
 
     <header class="header">

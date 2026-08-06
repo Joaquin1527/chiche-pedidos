@@ -440,6 +440,11 @@ $('confirmOrder').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (res.status === 403) {
+      el.cartOverlay.classList.add('hidden');
+      $('cerradoOverlay').classList.remove('hidden');
+      return;
+    }
     if (!res.ok) throw new Error('Error al generar el cobro');
     const pedido = await res.json();
 
@@ -519,7 +524,25 @@ $('newOrderBtn').addEventListener('click', () => {
   el.successOverlay.classList.add('hidden');
 });
 
+// ---------- Estado de la tienda: si está cerrada, tapamos todo con un aviso ----------
+async function chequearTiendaAbierta() {
+  try {
+    const res = await fetch('/api/estado-tienda');
+    const data = await res.json();
+    const cerradoOverlay = $('cerradoOverlay');
+    if (!data.abierta) {
+      cerradoOverlay.classList.remove('hidden');
+    } else {
+      cerradoOverlay.classList.add('hidden');
+    }
+  } catch (err) {
+    console.error('No se pudo consultar el estado de la tienda:', err);
+  }
+}
+
 // ---------- Init ----------
 renderTabs();
 renderMenu();
 actualizarCartBar();
+chequearTiendaAbierta();
+setInterval(chequearTiendaAbierta, 20000);
