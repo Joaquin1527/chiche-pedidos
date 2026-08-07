@@ -4,8 +4,6 @@ import cors from 'cors';
 import QRCode from 'qrcode';
 import { nanoid } from 'nanoid';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
-import { google } from 'googleapis';
-import ExcelJS from 'exceljs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,100 +34,6 @@ function guardarDB(db) {
 const mpClient = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
 const preferenceClient = new Preference(mpClient);
 const paymentClient = new Payment(mpClient);
-
-// ---------- Google Sheets (respaldo automatico de pedidos, sobrevive a que Render duerma) ----------
-// Si no estan cargadas las variables de entorno, esto queda desactivado sin
-// romper el resto del sistema (los pedidos se siguen cobrando igual).
-const SHEETS_CONFIGURADO = !!(
-  process.env.GOOGLE_SHEET_ID &&
-  process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
-  process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
-);
-
-let sheetsClient = null;
-if (SHEETS_CONFIGURADO) {
-  const auth = new google.auth.JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    // en la variable de entorno los saltos de linea quedan como "\n" literal, hay que restaurarlos
-    key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-  sheetsClient = google.sheets({ version: 'v4', auth });
-}
-
-const SHEET_NOMBRE = 'Pedidos';
-const SHEET_ENCABEZADOS = [
-  'ID', 'Fecha/Hora', 'Cliente', 'Items', 'Total', 'Metodo', 'Estado', 'Listo', 'Creado por',
-];
-
-function pedidoAFila(pedido) {
-  return [
-    pedido.id,
-    new Date(pedido.creadoEn).toLocaleString('es-AR'),
-    pedido.cliente,
-    pedido.items.map((it) => `${it.cantidad}x ${it.nombre}`).join(' | '),
-    pedido.total,
-    pedido.metodo,
-    pedido.estado,
-    pedido.listo ? 'SI' : 'NO',
-    pedido.creadoPor || '',
-  ];
-}
-
-// Asegura que la hoja tenga el encabezado (solo la primera vez que se usa).
-async function asegurarEncabezadoSheet() {
-  const res = await sheetsClient.spreadsheets.values.get({
-    spreadsheetId: process.env.GOOGLE_SHEET_ID,
-    range: `${SHEET_NOMBRE}!A1:I1`,
-  });
-  if (!res.data.values || res.data.values.length === 0) {
-    await sheetsClient.spreadsheets.values.update({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: `${SHEET_NOMBRE}!A1:I1`,
-      valueInputOption: 'RAW',
-      requestBody: { values: [SHEET_ENCABEZADOS] },
-    });
-  }
-}
-
-// Busca si el pedido ya tiene una fila (por su ID en la columna A) y la
-// actualiza; si no existe todavia, la agrega al final.
-async function sincronizarPedidoEnSheet(pedido) {
-  if (!SHEETS_CONFIGURADO) return; // no configurado todavia, no hacemos nada
-
-  try {
-    await asegurarEncabezadoSheet();
-
-    const columnaId = await sheetsClient.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: `${SHEET_NOMBRE}!A:A`,
-    });
-    const filas = columnaId.data.values || [];
-    const indiceFila = filas.findIndex((fila) => fila[0] === pedido.id);
-
-    const fila = pedidoAFila(pedido);
-
-    if (indiceFila === -1) {
-      await sheetsClient.spreadsheets.values.append({
-        spreadsheetId: process.env.GOOGLE_SHEET_ID,
-        range: `${SHEET_NOMBRE}!A:I`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [fila] },
-      });
-    } else {
-      const numeroFila = indiceFila + 1; // las filas de Sheets empiezan en 1
-      await sheetsClient.spreadsheets.values.update({
-        spreadsheetId: process.env.GOOGLE_SHEET_ID,
-        range: `${SHEET_NOMBRE}!A${numeroFila}:I${numeroFila}`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [fila] },
-      });
-    }
-  } catch (err) {
-    // Si falla el respaldo en Sheets, no queremos que se caiga el cobro real.
-    console.error('No se pudo sincronizar con Google Sheets:', err.message);
-  }
-}
 
 const app = express();
 app.use(cors());
@@ -220,7 +124,6 @@ app.post('/api/pedidos', async (req, res) => {
     const db = leerDB();
     db.pedidos.push(pedido);
     guardarDB(db);
-    sincronizarPedidoEnSheet(pedido); // no bloqueamos la respuesta esperando esto
 
     res.json(pedido);
   } catch (err) {
@@ -261,7 +164,6 @@ app.post('/api/pedidos/:id/confirmar-manual', (req, res) => {
   pedido.confirmadoPor = empleado || 'Sin especificar';
   pedido.pagadoEn = new Date().toISOString();
   guardarDB(db);
-  sincronizarPedidoEnSheet(pedido);
   res.json(pedido);
 });
 
@@ -273,7 +175,6 @@ app.post('/api/pedidos/:id/marcar-listo', (req, res) => {
   pedido.listo = true;
   pedido.listoEn = new Date().toISOString();
   guardarDB(db);
-  sincronizarPedidoEnSheet(pedido);
   res.json(pedido);
 });
 
@@ -284,7 +185,6 @@ app.post('/api/pedidos/:id/cancelar', (req, res) => {
   if (!pedido) return res.status(404).json({ error: 'No encontrado' });
   pedido.estado = 'cancelado';
   guardarDB(db);
-  sincronizarPedidoEnSheet(pedido);
   res.json(pedido);
 });
 
@@ -313,7 +213,6 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
           pedido.estado = 'cancelado';
         }
         guardarDB(db);
-        sincronizarPedidoEnSheet(pedido);
       }
     }
 
@@ -322,98 +221,6 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
   } catch (err) {
     console.error('Error procesando webhook:', err);
     res.sendStatus(200); // igual devolvemos 200 para que MP no reintente en loop por un error nuestro
-  }
-});
-
-// ---------- Metricas de pedidos ----------
-app.get('/api/metricas', (req, res) => {
-  const db = leerDB();
-  const pagados = db.pedidos.filter((p) => p.estado === 'pagado');
-
-  const totalFacturado = pagados.reduce((acc, p) => acc + p.total, 0);
-  const cantidadPedidos = pagados.length;
-  const ticketPromedio = cantidadPedidos > 0 ? totalFacturado / cantidadPedidos : 0;
-
-  // ranking de productos mas pedidos (por cantidad)
-  const conteoProductos = {};
-  pagados.forEach((p) => {
-    p.items.forEach((it) => {
-      conteoProductos[it.nombre] = (conteoProductos[it.nombre] || 0) + Number(it.cantidad);
-    });
-  });
-  const rankingProductos = Object.entries(conteoProductos)
-    .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-    .sort((a, b) => b.cantidad - a.cantidad)
-    .slice(0, 10);
-
-  // ventas agrupadas por dia (para los ultimos 14 dias con datos)
-  const ventasPorDia = {};
-  pagados.forEach((p) => {
-    const dia = new Date(p.pagadoEn || p.creadoEn).toLocaleDateString('es-AR');
-    if (!ventasPorDia[dia]) ventasPorDia[dia] = { dia, total: 0, cantidad: 0 };
-    ventasPorDia[dia].total += p.total;
-    ventasPorDia[dia].cantidad += 1;
-  });
-  const historialDiario = Object.values(ventasPorDia).sort(
-    (a, b) => new Date(a.dia.split('/').reverse().join('-')) - new Date(b.dia.split('/').reverse().join('-'))
-  );
-
-  res.json({
-    totalFacturado,
-    cantidadPedidos,
-    ticketPromedio,
-    pendientes: db.pedidos.filter((p) => p.estado === 'pendiente').length,
-    cancelados: db.pedidos.filter((p) => p.estado === 'cancelado').length,
-    rankingProductos,
-    historialDiario,
-    sheetsConfigurado: SHEETS_CONFIGURADO,
-    sheetUrl: SHEETS_CONFIGURADO ? `https://docs.google.com/spreadsheets/d/${process.env.GOOGLE_SHEET_ID}` : null,
-  });
-});
-
-// ---------- Exportar todos los pedidos a un archivo Excel ----------
-app.get('/api/exportar-excel', async (req, res) => {
-  try {
-    const db = leerDB();
-    const workbook = new ExcelJS.Workbook();
-    const hoja = workbook.addWorksheet('Pedidos');
-
-    hoja.columns = [
-      { header: 'ID', key: 'id', width: 14 },
-      { header: 'Fecha/Hora', key: 'fecha', width: 20 },
-      { header: 'Cliente', key: 'cliente', width: 20 },
-      { header: 'Items', key: 'items', width: 50 },
-      { header: 'Total', key: 'total', width: 12 },
-      { header: 'Metodo', key: 'metodo', width: 14 },
-      { header: 'Estado', key: 'estado', width: 12 },
-      { header: 'Listo', key: 'listo', width: 10 },
-      { header: 'Creado por', key: 'creadoPor', width: 18 },
-    ];
-    hoja.getRow(1).font = { bold: true };
-
-    db.pedidos
-      .sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn))
-      .forEach((p) => {
-        hoja.addRow({
-          id: p.id,
-          fecha: new Date(p.creadoEn).toLocaleString('es-AR'),
-          cliente: p.cliente,
-          items: p.items.map((it) => `${it.cantidad}x ${it.nombre}`).join(' | '),
-          total: p.total,
-          metodo: p.metodo,
-          estado: p.estado,
-          listo: p.listo ? 'SI' : 'NO',
-          creadoPor: p.creadoPor || '',
-        });
-      });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="chiche-pedidos.xlsx"');
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (err) {
-    console.error('Error exportando a Excel:', err);
-    res.status(500).json({ error: 'No se pudo generar el Excel' });
   }
 });
 
