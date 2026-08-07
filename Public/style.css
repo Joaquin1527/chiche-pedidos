@@ -403,19 +403,6 @@ select { color-scheme: dark; }
   animation: pedidoNuevoFlash 1.4s ease-in-out 3;
 }
 
-/* --- Link a métricas desde el panel --- */
-.btn-metricas {
-  display: block;
-  text-align: center;
-  text-decoration: none;
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: 10px;
-  border: 1.5px solid oklch(0.28 0.01 30);
-  color: oklch(0.85 0.01 30);
-  font-weight: 700;
-  font-size: 12.5px;
-}
 
 /* --- Destello de pantalla completa (aviso de pedido nuevo, visible de lejos) --- */
 #flashPantallaCompleta {

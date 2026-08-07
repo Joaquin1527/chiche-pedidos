@@ -14,9 +14,17 @@ const DB_FILE = path.join(__dirname, 'db.json');
 // ---------- "Base de datos" simple en archivo JSON ----------
 // Para un negocio de este tamano alcanza de sobra. Si en el futuro crece mucho
 // el volumen, se puede migrar a SQLite o Postgres sin tocar el resto del codigo.
+//
+// IMPORTANTE: tiendaAbierta arranca en FALSE (cerrada) por defecto. Es la opcion
+// "a prueba de fallos": si Render se reinicia solo (plan gratis, duerme cada
+// 15 min sin uso) y se pierde este archivo, preferimos que el sistema quede
+// bloqueado sin querer antes que acepte pedidos sin querer. Un empleado
+// siempre puede reabrirla a mano con el boton del panel.
 function leerDB() {
-  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({ pedidos: [] }, null, 2));
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({ pedidos: [], tiendaAbierta: false }, null, 2));
+  const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  if (typeof db.tiendaAbierta !== 'boolean') db.tiendaAbierta = false; // compatibilidad con db.json viejos
+  return db;
 }
 function guardarDB(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -32,9 +40,31 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'Public')));
 
+// ---------- Estado de la tienda (abierta / cerrada) ----------
+app.get('/api/estado-tienda', (req, res) => {
+  const db = leerDB();
+  res.json({ abierta: db.tiendaAbierta });
+});
+
+app.post('/api/estado-tienda', (req, res) => {
+  const { abierta } = req.body;
+  if (typeof abierta !== 'boolean') {
+    return res.status(400).json({ error: "Falta el campo 'abierta' (true/false)" });
+  }
+  const db = leerDB();
+  db.tiendaAbierta = abierta;
+  guardarDB(db);
+  res.json({ abierta: db.tiendaAbierta });
+});
+
 // ---------- Crear pedido ----------
 app.post('/api/pedidos', async (req, res) => {
   try {
+    const dbCheck = leerDB();
+    if (!dbCheck.tiendaAbierta) {
+      return res.status(403).json({ error: 'La tienda esta cerrada en este momento' });
+    }
+
     const { cliente, items, metodo, empleado } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
